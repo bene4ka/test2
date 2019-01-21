@@ -1,14 +1,12 @@
 from socket import *
 import sys
-import time
-import json
 import argparse
 import logging
 import names
-import client_log_config
 from client_log_config import Log
 from threading import Thread
 import tkinter
+from jim import *
 
 logger = logging.getLogger('app.main')
 
@@ -66,9 +64,9 @@ def send(event=None):  # event is passed by binders.
     """Handles sending of messages."""
     print('started send')
     msg = my_msg.get()
-    json_msg = make_message(msg=msg)
+    json_msg = MessageSent.message(msg=msg, user_key=random_name)
     my_msg.set("")  # Clears input field.
-    client_socket.send(bytes(json_msg, "utf8"))
+    client_socket.send(json_msg)
     if msg == "@quit":
         print('cause close')
         client_socket.close()
@@ -94,55 +92,6 @@ def sock_conn(args):
     return sock
 
 
-@Log()
-def make_presence(s, action_key='presence', type_key='status', status_key='I am here!'):
-    """
-    Создает словарь с ключами action, type, user, затем в формате JSON и кодировке utf-8 отправляет сообщение
-    серверу, принимает ответ и выводит его на экран.
-    :param s: сокет для соединения
-    :param action_key: выполняемое действие, например, presence(статус онлайна) или msg(сообщение).
-    :param type_key: тип выполняемого действия
-    :param status_key: Статус присутствия
-    :return:
-    """
-    print('presence')
-    logger.info('The name is ' + user_key)
-    msg = {
-        'action': action_key,
-        'time': int(time.time()),
-        'type': type_key,
-        'user': {
-            'user_name': user_key,
-            'status': status_key
-        }
-    }
-    msg_json = json.dumps(msg)
-    s.send(msg_json.encode('utf-8'))
-
-
-def make_message(action_key='message', type_key='msg', msg='Yellow!', status_key='I am here!'):
-    """
-    Converts user message to JSON format.
-    :param action_key: action type, default - message .
-    :param type_key: type of action, default is msg.
-    :param msg: user message, if not set than uses default Indian Hello version.
-    :param status_key: status of user, for future implementation (like Online/Away/Busy).
-    :return: dumped into JSON user message
-    """
-    j_msg = {
-        'action': action_key,
-        'time': int(time.time()),
-        'type': type_key,
-        'message': msg,
-        'user': {
-            'user_name': user_key,
-            'status': status_key
-        }
-    }
-    msg_json = json.dumps(j_msg)
-    return msg_json
-
-
 top = tkinter.Tk()
 top.title("Veseliy chat")
 
@@ -166,9 +115,11 @@ top.protocol("WM_DELETE_WINDOW", on_closing)
 
 # ----Now comes the sockets part----
 cmd_args = arguments()
-user_key = names.get_full_name()
+random_name = names.get_full_name()
 client_socket = sock_conn(cmd_args)
-make_presence(s=client_socket)
+
+presence = MessageSent.presence(user_key=random_name)
+client_socket.send(presence)
 
 receive_thread = Thread(target=receive)
 receive_thread.start()

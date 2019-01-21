@@ -1,4 +1,4 @@
-from jim import Message
+from jim import *
 
-msg = Message(type='presence', fuck='Matt')
+msg = MessageSent.message(user_key='Matt', msg='@Claire Bourne Hello!')
 print(msg)

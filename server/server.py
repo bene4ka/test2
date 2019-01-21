@@ -1,13 +1,12 @@
 # Серверная часть
 
 import sys
-import json
 import argparse
 import logging
 import select
-import server_log_config
 from socket import *
 from server_log_config import Log
+from jim import *
 
 logger = logging.getLogger('app.main')
 
@@ -26,7 +25,7 @@ def arguments():
     # Описание доступных опций запуска.
     parser.add_argument('-p', default='7777', help='port', type=int)
     parser.add_argument('-a', default='', help='address', type=str)
-    parser.add_argument('-v', default=1, help='verbose level', type=int)
+    parser.add_argument('-v', default=2, help='verbose level', type=int)
     # Получаем список спарсеных опций.
     parsed_opts = parser.parse_args()
     # Получаем порт и адрес
@@ -77,34 +76,6 @@ def sock_bind(args):
 
 
 @Log()
-def receiver(data):
-    """
-    Получает принятые данные и анализирует. Если это presence сообщение от залогинившегося пользователя, посылает ему
-    приветственное сообщение. Т.к. никакой другой функционал JIM еще не организован, если это не presence или message,
-    вернется ответ о ошибочном действии.
-    :param data: JSON, принятый от клиента.
-    :return: ответ клиенту в формате string.
-    """
-
-    if data.get('action') == 'presence':
-        user_key = data.get('user').get('user_name')
-        # logger.info('Пришло presence сообщение от клиента {}.'.format(addr))
-        logger.debug('Содержимое сообщения: {}.'.format(str(data)))
-        resp = user_key + ' joins to conversation!'
-    elif data.get('action') == 'message':
-        user_key = data.get('user').get('user_name')
-        msg = data.get('message')
-        # logger.info('Пришло presence сообщение от клиента {}.'.format(addr))
-        logger.debug('Содержимое сообщения: {}.'.format(str(data)))
-        resp = user_key + ': ' + msg
-    else:
-        resp = 'Error action, pal.'
-        # logger.info('Пришло что-то неведомое от клиента {}.'.format(addr))
-        logger.debug('Содержимое сообщения: {}. '.format(str(data)))
-    return resp
-
-
-# @Log()
 def read_requests(r_clients, all_clients):
     """
     Read requests from clients.
@@ -117,8 +88,8 @@ def read_requests(r_clients, all_clients):
     for sock in r_clients:
         try:
             data_json = sock.recv(1024)
-            data = json.loads(data_json.decode('utf-8'))
-            responses[sock] = receiver(data)
+            data = MessageRecv.respond(data_json)
+            responses[sock] = data
         except:
             logging.info('Клиент {} {} отключился'.format(sock.fileno(), sock.getpeername()))
             all_clients.remove(sock)
