@@ -7,8 +7,11 @@ import select
 from socket import *
 from server_log_config import Log
 from jim import *
+import queue
+import threading
 
 logger = logging.getLogger('app.main')
+masterQueue = queue.Queue()
 
 
 @Log()
@@ -76,48 +79,61 @@ def sock_bind(args):
 
 
 @Log()
-def read_requests(r_clients, all_clients):
-    """
-    Read requests from clients.
-    :param r_clients: clients from which server can get message.
-    :param all_clients: all currently connected clients.
-    :return:
-    """
-    responses = {}  # Словарь ответов сервера вида {сокет: запрос}
+class Reader:
 
-    for sock in r_clients:
-        try:
-            data_json = sock.recv(1024)
-            data = MessageRecv.respond(data_json)
-            responses[sock] = data
-        except:
-            logging.info('Клиент {} {} отключился'.format(sock.fileno(), sock.getpeername()))
-            all_clients.remove(sock)
+    # def __init__(self, my_queue):
+    #     threading.Thread.__init__(self)
+    #     self.queue = my_queue
+    #     self.read_requests(r_clients, all_clients)
 
-    return responses
+    @classmethod
+    def read_requests(cls, r_clients, all_clients):
+        """
+        Read requests from clients.
+        :param r_clients: clients from which server can get message.
+        :param all_clients: all currently connected clients.
+        :return:
+        """
+        responses = {}  # Словарь ответов сервера вида {сокет: запрос}
+
+        for sock in r_clients:
+            try:
+                data_json = sock.recv(1024)
+                data = MessageRecv.respond(data_json)
+                responses[sock] = data
+            except:
+                logging.info('Клиент {} {} отключился'.format(sock.fileno(), sock.getpeername()))
+                all_clients.remove(sock)
+
+        return cls.responses
 
 
 @Log()
-def write_responses(requests, w_clients, all_clients):
-    """
-    Broadcasts message which was received from any of clients to all connected clients.
-    :param requests: contains dictionary with message from sending client.
-    :param w_clients: clients which can receive message.
-    :param all_clients: all currently connected clients.
-    :return:
-    """
-    print('All clients: ' + str(all_clients))
-    for sock in w_clients:  # For every client who able to receive messages
-        if sock in requests:  # If there is a some message to send
-            try:
-                # Prepare and send answer for ALL.
-                resp = requests[sock].encode('utf-8')
-                for client in all_clients:
-                    client.sendall(resp)
-            except:  # Socket unavailable, client disconneted.
-                logging.info('Клиент {} {} отключился'.format(sock.fileno(), sock.getpeername()))
-                sock.close()
-                all_clients.remove(sock)
+class Writer(threading.Thread):
+    def __init__(self, my_queue):
+        threading.Thread.__init__(self)
+        self.queue = my_queue
+
+    def write_responses(self, requests, w_clients, all_clients):
+        """
+        Broadcasts message which was received from any of clients to all connected clients.
+        :param requests: contains dictionary with message from sending client.
+        :param w_clients: clients which can receive message.
+        :param all_clients: all currently connected clients.
+        :return:
+        """
+        print('All clients: ' + str(all_clients))
+        for sock in w_clients:  # For every client who able to receive messages
+            if sock in requests:  # If there is a some message to send
+                try:
+                    # Prepare and send answer for ALL.
+                    resp = requests[sock].encode('utf-8')
+                    for client in all_clients:
+                        client.sendall(resp)
+                except:  # Socket unavailable, client disconneted.
+                    logging.info('Клиент {} {} отключился'.format(sock.fileno(), sock.getpeername()))
+                    sock.close()
+                    all_clients.remove(sock)
 
 
 # main-функция
@@ -126,6 +142,10 @@ def main():
     s = sock_bind(args)
     clients = []
     usernames = []
+
+    # ms = MasterSender(masterQueue, clients)
+    # ms.setDaemon(True)
+    # ms.start()
     # Infinity cycle
     while True:
         try:
@@ -133,7 +153,6 @@ def main():
         except OSError as e:
             pass
         else:
-            logger.info("Get connection request from {}".format(str(addr)))
             clients.append(conn)
         finally:
             # Check input/output event.
@@ -145,9 +164,9 @@ def main():
             except:
                 pass  # Do nothing if someone disconnected.
 
-            requests = read_requests(r, clients)  # Save clients requests.
+            requests = Reader.read_requests(r, clients)  # Save clients requests.
             if requests:
-                write_responses(requests, w, clients)  # Send message for all.
+                Writer.write_responses(requests, w, clients)  # Send message for all.
 
 
 # Точка входа

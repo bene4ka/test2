@@ -1,4 +1,41 @@
-from jim import *
+# from jim import *
+#
+# msg = MessageSent.message(user_key='Matt', msg='@quit Bourne Hello!')
+# print(msg)
 
-msg = MessageSent.message(user_key='Matt', msg='@Claire Bourne Hello!')
-print(msg)
+
+from threading import Thread
+from queue import LifoQueue
+
+
+class WorkerThread(Thread):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.input_queue = LifoQueue()
+
+    def send(self, item):
+        self.input_queue.put(item)
+
+    def close(self):
+        self.input_queue.put(None)
+        self.input_queue.join()
+
+    def run(self):
+        while True:
+            item = self.input_queue.get()
+            if item is None:
+                break
+            # Обработать элемент (вместо print могут быть полезные операции)
+            print(item)
+            self.input_queue.task_done()
+        # Конец. Сообщить, что сигнальная метка была принята, и выйти
+        self.input_queue.task_done()
+
+
+# Пример использования
+w = WorkerThread()
+w.start()
+# Отправить элемент на обработку (с помощью очереди)
+w.send("hello")
+w.send("world")
+w.close()
